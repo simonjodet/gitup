@@ -53,7 +53,7 @@ class Repo {
             branchName +
             ")\n";
           if(result.files.length > 0){
-            output += stringify(result, null, 2);
+            output += JSON.stringify(result, null, 2);
           }
 
           return resolve(output);
