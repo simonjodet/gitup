@@ -47,12 +47,8 @@ class Repo {
             branchName = chalk.yellow(branchName);
           }
           delete result.summary;
-          let output =
-            chalk.cyan(repoName) +
-            " (" +
-            branchName +
-            ")\n";
-          if(result.files.length > 0){
+          let output = chalk.cyan(repoName) + " (" + branchName + ")\n";
+          if (result.files.length > 0) {
             output += JSON.stringify(result, null, 2);
           }
 
@@ -64,22 +60,40 @@ class Repo {
 
   checkout(branch) {
     return new Promise((resolve, reject) => {
-      this.repository.status((err, status) => {
+      this.repository.fetch(err => {
         if (err) {
           return reject(err);
         }
-        this.repository.checkout(branch, err => {
+
+        this.repository.status((err, status) => {
           if (err) {
             return reject(err);
           }
-          return resolve(
-            this.repository._baseDir +
-              ' - Branch "' +
-              branch +
-              '" checked out from "' +
-              status.current +
-              '"'
-          );
+
+          this.repository.branch((err, branches) => {
+            if (err) {
+              return reject(err);
+            }
+            if (
+              !branches.all.includes(branch) &&
+              !branches.all.includes("remotes/origin/" + branch)
+            ) {
+              branch = 'master';
+            }
+            this.repository.checkout(branch, err => {
+              if (err) {
+                return reject(err);
+              }
+              return resolve(
+                this.repository._baseDir +
+                  ' - Branch "' +
+                  branch +
+                  '" checked out from "' +
+                  status.current +
+                  '"'
+              );
+            });
+          });
         });
       });
     });
