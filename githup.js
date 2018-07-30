@@ -18,9 +18,10 @@ const argv = require("yargs")
   .example("$0 checkout <branch>", "Checkout the given branch").argv;
 
 class Repo {
-  constructor(path) {
+  constructor(path, paddingTarget = 0) {
     this.repository = simpleGit(path);
     this.repository._silentLogging = true;
+    this.paddingTarget = paddingTarget;
   }
 
   pull() {
@@ -38,7 +39,7 @@ class Repo {
           if (err) {
             return reject(err);
           }
-          let repoName = this.repository._baseDir.substr(
+          const repoName = this.repository._baseDir.substr(
             this.repository._baseDir.lastIndexOf("/") + 1
           );
 
@@ -47,15 +48,60 @@ class Repo {
             branchName = chalk.yellow(branchName);
           }
           delete result.summary;
-          let output = chalk.cyan(repoName) + " (" + branchName + ")\n";
-          if (result.files.length > 0) {
-            output += JSON.stringify(result, null, 2);
-          }
+          const outputInfo = this._pullOutput(repoName, status, result);
 
-          return resolve(output);
+          return resolve(outputInfo);
         });
       });
     });
+  }
+
+  _pullOutput(repoName, statusResult, pullResult) {
+    const outputInfo = {
+      repoName,
+      branchName: statusResult.tracking.substring(
+        statusResult.tracking.indexOf("/") + 1
+      ),
+      insertions: 0,
+      deletions: 0
+    };
+    for (const insertedFile of Object.keys(pullResult.insertions)) {
+      outputInfo.insertions += pullResult.insertions[insertedFile];
+    }
+    let deletedLines = 0;
+    for (const deletedFile of Object.keys(pullResult.deletions)) {
+      outputInfo.deletions += pullResult.deletions[deletedFile];
+    }
+
+    let output = chalk.cyan(
+      (repoName + Array(this.paddingTarget).join(" ")).substring(
+        0,
+        this.paddingTarget
+      )
+    );
+    output += " | ";
+    let insertions = "" + outputInfo.insertions;
+    const insertionsPaddingLength = 10;
+    insertions = (Array(insertionsPaddingLength).join(" ") + insertions).slice(
+      -insertionsPaddingLength
+    );
+    if (outputInfo.insertions > 0) {
+      insertions = chalk.bold(insertions);
+    }
+    output += insertions;
+    output += " | ";
+    let deletions = "" + outputInfo.deletions;
+    const deletionsPaddingLength = 9;
+    deletions = (Array(deletionsPaddingLength).join(" ") + deletions).slice(
+      -deletionsPaddingLength
+    );
+    if (outputInfo.deletions > 0) {
+      deletions = chalk.bold(deletions);
+    }
+    output += deletions;
+    output += " | " + outputInfo.branchName;
+
+    return output;
   }
 
   checkout(branch) {
@@ -78,20 +124,29 @@ class Repo {
               !branches.all.includes(branch) &&
               !branches.all.includes("remotes/origin/" + branch)
             ) {
-              branch = 'master';
+              branch = "master";
             }
             this.repository.checkout(branch, err => {
               if (err) {
                 return reject(err);
               }
-              return resolve(
-                this.repository._baseDir +
-                  ' - Branch "' +
-                  branch +
-                  '" checked out from "' +
-                  status.current +
-                  '"'
+              const repoName = this.repository._baseDir.substr(
+                this.repository._baseDir.lastIndexOf("/") + 1
               );
+
+              let output = chalk.cyan(
+                (repoName + Array(this.paddingTarget).join(" ")).substring(
+                  0,
+                  this.paddingTarget
+                )
+              );
+              if (branch === status.current) {
+                output += " | -";
+              } else {
+                output += " | " + chalk.bold(branch + " ➜ " + status.current);
+              }
+
+              return resolve(output);
             });
           });
         });
@@ -100,24 +155,52 @@ class Repo {
   }
 }
 
-for (let repositoryPath of argv.repositories) {
+const repositories = argv.repositories;
+const command = argv._[0];
+
+const longestRepoNameLength = repositories.reduce(function(a, b) {
+  return a.length > b.length ? a : b;
+}).length;
+
+let outputHeaders = chalk.bold(
+  ("Repository" + Array(longestRepoNameLength).join(" ")).substring(
+    0,
+    longestRepoNameLength
+  )
+);
+if (command === "pull") {
+  outputHeaders +=
+    " | " +
+    chalk.bold("Insertions") +
+    " | " +
+    chalk.bold("Deletions") +
+    " | " +
+    chalk.bold("Branch");
+} else if (command === "checkout") {
+  outputHeaders += " | " + chalk.bold("Change");
+}
+
+console.log(outputHeaders);
+
+for (let repositoryPath of repositories) {
   repositoryPath = path.resolve(__dirname, "..", repositoryPath);
-  const repo = new Repo(repositoryPath);
+  const repo = new Repo(repositoryPath, longestRepoNameLength);
   const actions = {
     pull: () => {
       return repo.pull();
     },
     checkout: () => {
-      if (!argv._[1]) {
+      const branchName = argv._[1];
+      if (!branchName) {
         return new Promise((resolve, reject) => {
           return reject("You need to specify a branch to checkout");
         });
       }
-      return repo.checkout(argv._[1]);
+      return repo.checkout(branchName);
     }
   };
 
-  actions[argv._[0]]()
+  actions[command]()
     .then(result => {
       console.log(result);
     })
