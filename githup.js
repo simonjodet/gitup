@@ -68,7 +68,6 @@ class Repo {
     for (const insertedFile of Object.keys(pullResult.insertions)) {
       outputInfo.insertions += pullResult.insertions[insertedFile];
     }
-    let deletedLines = 0;
     for (const deletedFile of Object.keys(pullResult.deletions)) {
       outputInfo.deletions += pullResult.deletions[deletedFile];
     }
